@@ -1,0 +1,137 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split 
+import tensorflow as tf
+from tensorflow import keras 
+import keras as ks
+import shap
+from tensorflow.keras import layers
+from tensorflow.keras.layers import BatchNormalization
+from sklearn.ensemble import RandomForestRegressor
+#################################
+#train=pd.read_csv("train_80_3_plt1A.csv")
+#test=pd.read_csv("test_20_3_plt1A.csv")
+Planta=pd.read_csv("JARRA_1.csv")
+#Planta.head()
+#pd.DataFrame(Planta)
+###########################
+parametros=Planta.loc[:,("Turbiedad","Color","pH","Alcalinidad","Temperatura","Cal pre","Sulfato","Polimero","Cal")]
+parametros.head()
+#continua con rangos de trabajo de la red
+############################3
+#División de datos 80%/20%
+train, test= train_test_split(parametros, test_size = 0.2)
+#print("Ejemplos usados para entrenar: ", len(train))
+#print("Ejemplos usados para test: ", len(test))
+#print("Datos totales:",len(train)+len(test))
+#######################
+#Seleccion de datos de entrenamiento de entrada
+x_train=train.loc[:,("Turbiedad","Color","pH","Alcalinidad","Temperatura")]
+x_train.head()
+#######################
+def norm(x, train_stats):
+  return (x - train_stats['mean']) / train_stats['std']
+
+train_stats = x_train.describe()
+train_stats = train_stats.transpose()
+train_stats
+##################
+#Seleecion de datos de entrenamiento de salida
+y_train=train.loc[:,("Cal pre","Sulfato","Polimero","Cal")]
+y_train.head()
+#####################
+#Seleccion de datos de prueba de entrada
+x_test=test.loc[:,("Turbiedad","Color","pH","Alcalinidad","Temperatura")]
+x_test.head()
+#########################
+x_train = norm(x_train, train_stats)
+x_test = norm(x_test, train_stats)
+print(x_train)
+##################################
+#Seleecion de datos de prueba de salida
+y_test=test.loc[:,("Cal pre","Sulfato","Polimero","Cal")]
+y_test.head()
+####################
+from keras.models import Sequential
+from keras.layers import Activation, Dense,BatchNormalization, Input, Dropout
+from keras import optimizers
+import keras.regularizers
+##################
+model=Sequential()
+#####################
+#Arquitectura de la red
+def mlp_model(n_input, n_output):
+    model = Sequential()
+    
+    model.add(Dense(64,input_dim = n_input))
+    model.add(BatchNormalization())
+    model.add(Activation('relu'))
+    model.add(Dropout(0.3))
+    model.add(Dense(64))
+    model.add(BatchNormalization())
+    model.add(Activation('relu')) 
+    model.add(Dropout(0.2)) 
+    model.add(Dense(32))
+    model.add(BatchNormalization())
+    model.add(Activation('relu'))
+    model.add(Dropout(0.05)) 
+    model.add(Dense(n_output))
+    
+    adam = optimizers.Adam(lr = 0.001)
+    model.compile(optimizer = adam, loss="mae", metrics=["mae","mse","acc"])
+
+    return model
+    ######################
+  model = mlp_model(x_train.shape[1],y_train.shape[1])
+history = model.fit(x_train, y_train, validation_data=(x_test,y_test) ,epochs = 600, verbose = 0)
+#model.summary()
+################
+results = model.evaluate(x_test, y_test)
+print(results)
+y_hat = model.predict(x_test)
+print(y_test)
+print(y_hat)
+########################
+print('Loss mae - Entrenamiento: ', results[0])
+print(' Val mae - Prueba: ', results[1])
+print(' Val mse: ', results[2])
+#print("Test accurancy:", results[3])
+exactitud=results[3]*100
+print("% Exactitud:",exactitud)
+#############33
+plt.plot(history.history["mae"])
+plt.plot(history.history['val_mae'])
+#plt.plot(history.history['loss'])
+#plt.plot(history.history['val_loss'])
+plt.legend(['train mae', 'valid mae', 'train loss', 'valid loss'], loc = 'upper left')
+plt.xlabel("Epocas")
+plt.ylabel("Error mae")
+plt.show()
+#####################
+plt.scatter(y_test["Sulfato"], y_hat[:,1], color = "orange", label = "Sulfato",alpha=0.5)
+plt.scatter(y_test["Polimero"], y_hat[:,2], color = "green", label = "Polimero", alpha=0.5)
+plt.scatter(y_test["Cal pre"], y_hat[:,0], color = "blue", label = "Cal pre", alpha=0.2)
+plt.scatter(y_test["Cal"], y_hat[:,3], color = "yellow", label = "Cal", alpha=0.2)        
+plt.xlabel('True Values ')
+plt.ylabel('Predictions ')
+plt.axis('equal')
+plt.axis('square')
+plt.xlim([0,plt.xlim()[1]])
+plt.ylim([0,plt.ylim()[1]])
+plt.legend()
+_ = plt.plot([-100, 100], [-100, 100])
+#########################3
+model = RandomForestRegressor(random_state=50) 
+model.fit(x_train, y_train)
+explainer = shap.TreeExplainer(model) 
+shap_values = explainer.shap_values(x_train)
+targets=["Cal pre", "Sulfato", "Polimero", "Cal"]
+##########################
+shap.summary_plot(shap_values, x_train,class_names=targets, plot_type='bar')
+#####################
+#train.to_csv(r"C:\Users\Equipo\Desktop\Trabajo de Titulo\Agua\NUEVAS PRUEBAS\PlANTA_1_A\train1A_7.csv",index=False)
+##################3
+#test.to_csv(r"C:\Users\Equipo\Desktop\Trabajo de Titulo\Agua\NUEVAS PRUEBAS\PlANTA_1_A\test1A_7.csv",index=False)
+########################
+#np.savetxt('Predicción_P1A_7.csv', y_hat, delimiter=',')
